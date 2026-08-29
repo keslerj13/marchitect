@@ -192,6 +192,10 @@ kbd{font-family:"IBM Plex Mono",monospace; font-size:11px; background:var(--sunk
       <label for="snap" class="unit">SNAP</label>
       <select id="snap" style="width:auto"><option value="1">1"</option><option value="3">3"</option><option value="6" selected>6"</option><option value="12">1'</option><option value="0">free</option></select>
     </div>
+    <div class="row">
+      <label for="units" class="unit">SIZES</label>
+      <select id="units" style="width:auto"><option value="in">inches</option><option value="ft">feet</option></select>
+    </div>
     <button class="btn ghost" id="btnData">Save / Load</button>
     <button class="btn ghost" id="btnPng">Image</button>
     <button class="btn ghost" id="btnClear">Reset</button>
@@ -217,11 +221,11 @@ kbd{font-family:"IBM Plex Mono",monospace; font-size:11px; background:var(--sunk
         <div class="palette" id="modules" style="margin-top:8px"></div>
       </div>
       <div class="row">
-        <input id="cw" type="number" step="1" min="1" placeholder="W in" title="Custom width, inches" class="grow">
-        <input id="ch" type="number" step="1" min="1" placeholder="D in" title="Custom depth, inches" class="grow">
+        <input id="cw" type="number" step="1" min="0" placeholder="W in" title="Custom width" class="grow">
+        <input id="ch" type="number" step="1" min="0" placeholder="D in" title="Custom depth" class="grow">
         <button class="btn" id="btnCustom">Add</button>
       </div>
-      <p class="hint">Custom size in inches. <kbd>R</kbd> turn 90° · <kbd>D</kbd> duplicate · <kbd>⌫</kbd> delete · hold <kbd>alt</kbd> to ignore snapping · drag the handle above a block to set any angle</p>
+      <p class="hint"><span id="customHint">Custom size in inches.</span> <kbd>R</kbd> turn 90° · <kbd>D</kbd> duplicate · <kbd>⌫</kbd> delete · hold <kbd>alt</kbd> to ignore snapping · drag the handle above a block to set any angle</p>
     </section>
 
     <section class="stack" id="propsWrap" hidden>
@@ -229,17 +233,17 @@ kbd{font-family:"IBM Plex Mono",monospace; font-size:11px; background:var(--sunk
       <label for="pName">Label — shown on the block</label>
       <input id="pName" type="text" placeholder="e.g. Potted plant, Julie's table" style="font-family:'IBM Plex Sans'">
       <div class="row" id="pSize">
-        <input id="pW" type="number" step="1" min="1" class="grow" title="Width, inches">
+        <input id="pW" type="number" step="1" min="1" class="grow" title="Width">
         <span class="unit">×</span>
-        <input id="pH" type="number" step="1" min="1" class="grow" title="Depth, inches">
-        <span class="unit">in</span>
+        <input id="pH" type="number" step="1" min="1" class="grow" title="Depth">
+        <span class="unit" id="pSizeU">in</span>
       </div>
       <div class="dim"><label for="pA">Angle</label>
         <input id="pA" type="number" step="1" class="grow" style="max-width:70px"><span class="unit">°</span>
         <button class="btn ghost" id="pRot90" title="Turn a quarter turn">+90°</button>
         <span class="unit grow" id="pArea" style="text-align:right"></span></div>
       <div class="dim"><label for="pClear">Clearance</label>
-        <input id="pClear" type="number" step="1" min="0" class="grow" style="max-width:70px"><span class="unit">in</span>
+        <input id="pClear" type="number" step="1" min="0" class="grow" style="max-width:70px"><span class="unit" id="pClearU">in</span>
         <select id="pSide" class="grow" style="font-family:'IBM Plex Sans'">
           <option value="a">all around</option>
           <option value="b">behind</option>
@@ -334,6 +338,16 @@ const IN = { // everything internal is inches
     return neg + f + "'" + i + frac + '"';
   },
   from(ft, inch){ return (+ft||0)*12 + (+inch||0); }
+};
+
+/* Size fields read and write whichever unit is selected; everything stored stays inches. */
+const UNITKEY = "boothplotter.units";
+const U = {
+  u: "in",
+  to(inches){ return this.u === "ft" ? Math.round(inches/12*1000)/1000 : Math.round(inches); },
+  from(v){ const n = +v || 0; return this.u === "ft" ? n*12 : n; },
+  label(){ return this.u === "ft" ? "ft" : "in"; },
+  step(){ return this.u === "ft" ? 0.25 : 1; }
 };
 
 /* ---------- presets ---------- */
@@ -941,7 +955,7 @@ $("spacePresets").addEventListener("click", e=>{
   const [,w,h] = SPACE_PRESETS[+b.dataset.i]; push(); S.space = {w,h}; syncSpaceInputs(); fit(); refresh();
 });
 $("btnCustom").addEventListener("click", ()=>{
-  const w = +$("cw").value, h = +$("ch").value;
+  const w = U.from($("cw").value), h = U.from($("ch").value);
   if (!(w>0 && h>0)) return;
   add({n:IN.fmt(w)+"×"+IN.fmt(h), w, h, c:5});
   $("cw").value = ""; $("ch").value = "";
@@ -957,6 +971,20 @@ function syncSpaceInputs(){
   $("sd").value = Math.floor(S.space.h/12); $("sdi").value = Math.round(S.space.h%12);
 }
 $("snap").addEventListener("change", e => S.snap = +e.target.value);
+$("units").addEventListener("change", e=>{
+  U.u = e.target.value === "ft" ? "ft" : "in";
+  try{ localStorage.setItem(UNITKEY, U.u); }catch(err){}
+  syncUnits(); syncProps();
+});
+function syncUnits(){
+  const l = U.label(), st = U.step();
+  $("units").value = U.u;
+  $("pSizeU").textContent = l;
+  $("pClearU").textContent = l;
+  $("cw").placeholder = "W " + l; $("ch").placeholder = "D " + l;
+  ["pW","pH","pClear","cw","ch"].forEach(id => $(id).step = st);
+  $("customHint").textContent = "Custom size in " + (U.u === "ft" ? "feet" : "inches") + ".";
+}
 $("mSelect").addEventListener("click", ()=>setMode("select"));
 $("mMeasure").addEventListener("click", ()=>setMode("measure"));
 $("mDraw").addEventListener("click", ()=>setMode("draw"));
@@ -1002,17 +1030,17 @@ function syncProps(){
   if (!b) return;
   $("pName").value = b.n;
   $("pSize").hidden = !!b.pts;
-  if (!b.pts){ $("pW").value = Math.round(b.w); $("pH").value = Math.round(b.h); }
+  if (!b.pts){ $("pW").value = U.to(b.w); $("pH").value = U.to(b.h); }
   $("pA").value = Math.round(b.a||0);
   $("pArea").textContent = Math.round(area(localPts(b))/144) + " sq ft";
-  $("pClear").value = Math.round(b.clear||0); $("pSide").value = b.cs || "a";
+  $("pClear").value = U.to(b.clear||0); $("pSide").value = b.cs || "a";
 }
 $("pName").addEventListener("input", e=>{ const b = selBlock(); if (b){ b.n = e.target.value; refresh(); }});
 ["pW","pH","pClear","pSide","pA"].forEach(id => $(id).addEventListener("change", ()=>{
   const b = selBlock(); if (!b) return; push();
-  if (!b.pts){ b.w = Math.max(1, +$("pW").value||b.w); b.h = Math.max(1, +$("pH").value||b.h); }
+  if (!b.pts){ b.w = Math.max(1, U.from($("pW").value) || b.w); b.h = Math.max(1, U.from($("pH").value) || b.h); }
   b.a = (((+$("pA").value||0) % 360) + 360) % 360;
-  b.clear = Math.max(0, +$("pClear").value||0); b.cs = $("pSide").value; refresh();
+  b.clear = Math.max(0, U.from($("pClear").value)); b.cs = $("pSide").value; refresh();
 }));
 $("pRot90").addEventListener("click", turn90);
 function turn90(){ const b = selBlock(); if (b){ push();
@@ -1143,6 +1171,8 @@ $("btnPng").addEventListener("click", ()=>{
 });
 
 /* boot */
+try{ const u = localStorage.getItem(UNITKEY); if (u === "ft" || u === "in") U.u = u; }catch(e){}
+syncUnits();
 syncSpaceInputs(); setMode("select"); renderPalette(); renderLayouts();
 try{ const raw = localStorage.getItem(KEY); if (raw) load(raw); }catch(e){}
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
