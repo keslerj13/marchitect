@@ -140,7 +140,38 @@ dialog::backdrop{background:rgba(10,14,16,.5)}
 .hint{font-size:12px; color:var(--ink3)}
 kbd{font-family:"IBM Plex Mono",monospace; font-size:11px; background:var(--sunk); border:1px solid var(--line);
   border-bottom-width:2px; border-radius:4px; padding:0 4px}
+.actbar{
+  position:absolute; left:50%; transform:translateX(-50%); bottom:10px; z-index:2;
+  display:none; gap:4px; align-items:center; background:var(--panel);
+  border:1px solid var(--line); border-radius:var(--r); padding:4px; box-shadow:var(--shadow);
+}
+.actbar.on{display:flex}
+.actbar button{white-space:nowrap}
+.actbar .name{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:12.5px; font-weight:600;
+  padding:0 8px; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+/* touch devices: 16px inputs stop iOS zooming on focus, and tap targets get bigger */
+@media (pointer: coarse){
+  input[type=number],input[type=text],select,.dlg textarea{font-size:16px; padding:9px 10px}
+  button.btn{padding:9px 13px}
+  button.btn.ghost{padding:8px 10px}
+  .seg button{padding:9px 14px}
+  .chip{padding:9px 11px}
+  .chip .x{
+    top:0; right:0; width:38px; height:38px; display:flex; align-items:center;
+    justify-content:center; font-size:19px; color:var(--ink2); border-radius:0 var(--r) 0 var(--r);
+  }
+  .chip b,.chip i{padding-right:30px}
+  .lib .rowi{padding:7px}
+  .overlay{padding:6px; gap:8px}
+}
 @media (max-width:900px){
+  header{gap:8px; padding:8px 10px}
+  .wordmark{width:100%; margin-right:0}
+  .wordmark span{display:none}
+  .seg button{padding:8px 11px}
+  button.btn.ghost{padding:7px 9px}
   .app{grid-template-columns:1fr; grid-template-rows:auto minmax(280px,52vh) auto auto; height:auto; min-height:100dvh}
   aside{grid-row:auto; grid-column:1; border-right:0; border-top:1px solid var(--line); overflow:visible}
   main{grid-row:2}
@@ -250,6 +281,13 @@ kbd{font-family:"IBM Plex Mono",monospace; font-size:11px; background:var(--sunk
 
   <main>
     <canvas id="cv"></canvas>
+    <div class="actbar" id="actbar">
+      <span class="name" id="actName"></span>
+      <button class="btn ghost" id="actRot" title="Turn 90°">↻90°</button>
+      <button class="btn ghost" id="actDup" title="Duplicate">Copy</button>
+      <button class="btn ghost" id="actDel" title="Delete">Delete</button>
+      <button class="btn ghost" id="actClose" title="Deselect">Done</button>
+    </div>
     <div class="overlay">
       <button class="btn ghost" id="zOut" title="Zoom out">−</button>
       <button class="btn ghost" id="zIn" title="Zoom in">+</button>
@@ -580,26 +618,38 @@ function edgesX(){ const a=[0,S.space.w]; S.blocks.forEach(b=>worldPts(b).forEac
 function edgesY(){ const a=[0,S.space.h]; S.blocks.forEach(b=>worldPts(b).forEach(p=>a.push(p.y))); return a; }
 const isFree = e => e.altKey || !S.snap;
 
-/* ---------- interaction ---------- */
-let drag = null;
+/* ---------- interaction ----------
+   Pointers are tracked as a set: one finger draws or drags, two fingers always
+   mean pinch-zoom-and-pan, whatever is under them. */
+let drag = null, gesture = null, suppress = false, longPress = null;
+const pointers = new Map();
 const draft = {pts:[], cur:null};
 const pos = e => { const r = cv.getBoundingClientRect(); return {px:e.clientX-r.left, py:e.clientY-r.top}; };
-function pick(x,y){
+const isTouch = e => e.pointerType === "touch" || e.pointerType === "pen";
+const pickTol = e => isTouch(e) ? 14/S.view.s : 0;   // fingers are wider than a cursor
+
+function pick(x, y, tol){
   for (let i=S.blocks.length-1;i>=0;i--) if (inPoly({x,y}, worldPts(S.blocks[i]))) return S.blocks[i];
+  if (!tol) return null;
+  for (let a=0; a<8; a++){            // near-miss ring, so a fat tap still lands
+    const px = x + Math.cos(a*Math.PI/4)*tol, py = y + Math.sin(a*Math.PI/4)*tol;
+    for (let i=S.blocks.length-1;i>=0;i--) if (inPoly({x:px,y:py}, worldPts(S.blocks[i]))) return S.blocks[i];
+  }
   return null;
 }
-function pickM(px,py){
+function pickM(px,py,tol){
+  const r = 7 + (tol ? 8 : 0);
   for (let i=S.measures.length-1;i>=0;i--){ const m = S.measures[i];
     const ax=X(m.x1),ay=Y(m.y1),bx=X(m.x2),by=Y(m.y2);
     const L=Math.hypot(bx-ax,by-ay)||1, tt=Math.max(0,Math.min(1,((px-ax)*(bx-ax)+(py-ay)*(by-ay))/(L*L)));
-    if (Math.hypot(px-(ax+tt*(bx-ax)), py-(ay+tt*(by-ay))) < 7) return m; }
+    if (Math.hypot(px-(ax+tt*(bx-ax)), py-(ay+tt*(by-ay))) < r) return m; }
   return null;
 }
-function onHandle(px,py){
+function onHandle(px,py,tol){
   if (S.selKind !== "b") return null;
   const b = S.blocks.find(v=>v.id===S.sel); if (!b) return null;
   const h = handlePt(b);
-  return Math.hypot(px-X(h.x), py-Y(h.y)) < 11 ? b : null;
+  return Math.hypot(px-X(h.x), py-Y(h.y)) < (tol ? 20 : 11) ? b : null;
 }
 
 function closeDraft(){
@@ -614,14 +664,47 @@ function closeDraft(){
   select("b", b.id); setMode("select"); refresh();
 }
 
+/* two-finger pinch: undo whatever the first finger had started, then zoom+pan together */
+function gestureMid(){
+  const a = [...pointers.values()];
+  return {px:(a[0].px+a[1].px)/2, py:(a[0].py+a[1].py)/2, d:Math.hypot(a[0].px-a[1].px, a[0].py-a[1].py)};
+}
+function startGesture(){
+  cancelLongPress();
+  if (drag){
+    const b = S.blocks.find(v=>v.id===drag.id);
+    if (b && drag.k === "move"){ b.cx = drag.cx0; b.cy = drag.cy0; }
+    if (b && drag.k === "rotate") b.a = drag.a0;
+    if (drag.k !== "pan") hist.pop();          // that half-started edit never happened
+    drag = null;
+  }
+  const m = gestureMid();
+  gesture = {m0:m, d0:m.d || 1, s0:S.view.s, ox0:S.view.ox, oy0:S.view.oy};
+  touched = true; draw();
+}
+function applyGesture(){
+  const m = gestureMid();
+  const ns = Math.max(0.4, Math.min(24, gesture.s0 * (m.d / gesture.d0)));
+  const wx0 = (gesture.m0.px - gesture.ox0)/gesture.s0;
+  const wy0 = (gesture.m0.py - gesture.oy0)/gesture.s0;
+  S.view.s = ns; S.view.ox = m.px - wx0*ns; S.view.oy = m.py - wy0*ns;
+  draw();
+}
+function cancelLongPress(){ if (longPress){ clearTimeout(longPress.t); longPress = null; } }
+
 cv.addEventListener("pointerdown", e=>{
+  const {px,py} = pos(e);
+  pointers.set(e.pointerId, {px,py});
+  if (pointers.size === 2){ startGesture(); return; }
+  if (pointers.size > 2 || suppress) return;
+
   touched = true; cv.setPointerCapture(e.pointerId);
-  const {px,py} = pos(e), free = isFree(e);
+  const free = isFree(e), tol = pickTol(e);
   const x = wx(px), y = wy(py);
 
   if (S.mode === "draw"){
     const p = {x:snapV(x, edgesX(), free), y:snapV(y, edgesY(), free)};
-    if (draft.pts.length > 2 && Math.hypot(X(p.x)-X(draft.pts[0].x), Y(p.y)-Y(draft.pts[0].y)) < 12){ closeDraft(); return; }
+    if (draft.pts.length > 2 && Math.hypot(X(p.x)-X(draft.pts[0].x), Y(p.y)-Y(draft.pts[0].y)) < (tol ? 20 : 12)){ closeDraft(); return; }
     draft.pts.push(p); draw(); return;
   }
   if (S.mode === "measure"){
@@ -629,19 +712,28 @@ cv.addEventListener("pointerdown", e=>{
     drag = {k:"measure", x1:snapV(x, edgesX(), free), y1:snapV(y, edgesY(), free), x2:x, y2:y};
     return;
   }
-  const rot = onHandle(px,py);
-  if (rot){ push(); drag = {k:"rotate", id:rot.id}; return; }
-  const b = pick(x,y);
-  const m = pickM(px,py);
-  if (b){ select("b", b.id); push(); drag = {k:"move", id:b.id, dx:x-b.cx, dy:y-b.cy}; }
+  const rot = onHandle(px,py,tol);
+  if (rot){ push(); drag = {k:"rotate", id:rot.id, a0:rot.a||0}; return; }
+  const b = pick(x,y,tol);
+  const m = pickM(px,py,tol);
+  if (b){
+    select("b", b.id); push();
+    drag = {k:"move", id:b.id, dx:x-b.cx, dy:y-b.cy, cx0:b.cx, cy0:b.cy, px, py};
+    if (isTouch(e)) longPress = {t:setTimeout(()=>{ longPress = null; drag = null; rename(b); }, 550), px, py};
+  }
   else if (m){ select("m", m.id); }
   else { select(null); drag = {k:"pan", px, py, ox:S.view.ox, oy:S.view.oy}; }
   draw();
 });
+
 cv.addEventListener("pointermove", e=>{
   const {px,py} = pos(e), free = isFree(e);
   const x = wx(px), y = wy(py);
-  document.getElementById("stCur").textContent = IN.fmt(x)+", "+IN.fmt(y);
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, {px,py});
+  if (gesture && pointers.size >= 2){ applyGesture(); return; }
+  if (suppress) return;
+  $("stCur").textContent = IN.fmt(x)+", "+IN.fmt(y);
+  if (longPress && Math.hypot(px-longPress.px, py-longPress.py) > 8) cancelLongPress();
 
   if (S.mode === "draw" && !drag){
     draft.cur = draft.pts.length ? {x:snapV(x, edgesX(), free), y:snapV(y, edgesY(), free)} : null;
@@ -650,7 +742,7 @@ cv.addEventListener("pointermove", e=>{
   }
   if (!drag){
     cv.style.cursor = S.mode === "measure" ? "crosshair"
-      : onHandle(px,py) ? "grab" : pick(x,y) ? "move" : "grab";
+      : onHandle(px,py,0) ? "grab" : pick(x,y,0) ? "move" : "grab";
     return;
   }
   if (drag.k === "pan"){ S.view.ox = drag.ox + (px-drag.px); S.view.oy = drag.oy + (py-drag.py); draw(); return; }
@@ -680,7 +772,15 @@ cv.addEventListener("pointermove", e=>{
     drag.x2 = nx; drag.y2 = ny; draw();
   }
 });
-cv.addEventListener("pointerup", ()=>{
+
+function endPointer(e){
+  cancelLongPress();
+  pointers.delete(e.pointerId);
+  if (gesture && pointers.size < 2){
+    gesture = null; drag = null;
+    suppress = pointers.size > 0;     // ignore the leftover finger until it lifts
+  }
+  if (!pointers.size) suppress = false;
   if (drag && drag.k === "measure"){
     if (Math.hypot(drag.x2-drag.x1, drag.y2-drag.y1) * S.view.s > 12){
       const m = {id:uid++, x1:drag.x1, y1:drag.y1, x2:drag.x2, y2:drag.y2};
@@ -688,14 +788,19 @@ cv.addEventListener("pointerup", ()=>{
     } else hist.pop();
   }
   drag = null; refresh();
-});
-cv.addEventListener("dblclick", e=>{
-  if (S.mode === "draw"){ closeDraft(); return; }
-  const {px,py} = pos(e), b = pick(wx(px), wy(py));
-  if (!b) return;
+}
+cv.addEventListener("pointerup", endPointer);
+cv.addEventListener("pointercancel", endPointer);
+
+function rename(b){
   const n = prompt("Label for this block", b.n);
   if (n === null) return;
   push(); b.n = n.trim() || b.n; select("b", b.id); refresh();
+}
+cv.addEventListener("dblclick", e=>{
+  if (S.mode === "draw"){ closeDraft(); return; }
+  const {px,py} = pos(e), b = pick(wx(px), wy(py), 0);
+  if (b) rename(b);
 });
 cv.addEventListener("wheel", e=>{
   e.preventDefault(); touched = true;
@@ -784,7 +889,12 @@ function renderPalette(){
 }
 function paletteClick(e){
   const x = e.target.closest(".x");
-  if (x){ e.stopPropagation(); LIB.modules.splice(+x.dataset.del, 1); saveLib(); renderPalette(); refreshFit(); return; }
+  if (x){
+    e.stopPropagation();
+    const i = +x.dataset.del;
+    if (!confirm("Remove the module “" + LIB.modules[i].n + "”? Blocks already placed stay put.")) return;
+    LIB.modules.splice(i, 1); saveLib(); renderPalette(); refreshFit(); return;
+  }
   const c = e.target.closest(".chip"); if (!c) return;
   add(c.dataset.src === "m" ? LIB.modules[+c.dataset.i] : PRESETS[+c.dataset.i]);
 }
@@ -882,6 +992,12 @@ $("btnClear").addEventListener("click", ()=>{
 function selBlock(){ return S.selKind === "b" ? S.blocks.find(v=>v.id===S.sel) : null; }
 function syncProps(){
   const b = selBlock();
+  const bar = $("actbar");
+  bar.classList.toggle("on", !!S.sel);
+  if (S.sel){
+    $("actName").textContent = b ? b.n : "Measurement";
+    $("actRot").hidden = !b; $("actDup").hidden = !b;
+  }
   $("propsWrap").hidden = !b;
   if (!b) return;
   $("pName").value = b.n;
@@ -898,12 +1014,24 @@ $("pName").addEventListener("input", e=>{ const b = selBlock(); if (b){ b.n = e.
   b.a = (((+$("pA").value||0) % 360) + 360) % 360;
   b.clear = Math.max(0, +$("pClear").value||0); b.cs = $("pSide").value; refresh();
 }));
-$("pRot90").addEventListener("click", ()=>{ const b = selBlock(); if (b){ push();
-  b.a = (((b.a||0) + 90) % 360 + 360) % 360; refresh(); }});
-$("pDup").addEventListener("click", ()=>{ const b = selBlock(); if (b){ push();
-  const c = {...b, id:uid++, cx:b.cx+12, cy:b.cy+12}; S.blocks.push(c); select("b", c.id); refresh(); }});
-$("pDel").addEventListener("click", ()=>{ const b = selBlock(); if (b){ push();
-  S.blocks = S.blocks.filter(v=>v.id!==b.id); select(null); refresh(); }});
+$("pRot90").addEventListener("click", turn90);
+function turn90(){ const b = selBlock(); if (b){ push();
+  b.a = (((b.a||0) + 90) % 360 + 360) % 360; refresh(); } }
+function dupSel(){ const b = selBlock(); if (b){ push();
+  const c = {...b, id:uid++, cx:b.cx+12, cy:b.cy+12}; S.blocks.push(c); select("b", c.id); refresh(); } }
+function delSel(){
+  if (!S.sel) return;
+  push();
+  if (S.selKind === "b") S.blocks = S.blocks.filter(v=>v.id!==S.sel);
+  else S.measures = S.measures.filter(v=>v.id!==S.sel);
+  select(null); refresh();
+}
+$("actRot").addEventListener("click", turn90);
+$("actDup").addEventListener("click", dupSel);
+$("actDel").addEventListener("click", delSel);
+$("actClose").addEventListener("click", ()=>{ select(null); refresh(); });
+$("pDup").addEventListener("click", dupSel);
+$("pDel").addEventListener("click", delSel);
 
 /* fit calculator */
 ["fitPick","gapF","gapI"].forEach(id => $(id).addEventListener("change", refreshFit));
