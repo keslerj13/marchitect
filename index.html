@@ -1,0 +1,1022 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Booth Plotter</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#EDEFEA; --panel:#F7F8F5; --sunk:#E4E7E0;
+  --ink:#161C22; --ink2:#5B6670; --ink3:#8A9490;
+  --line:#CBD2C9; --line2:#DDE2DA;
+  --accent:#D2551F; --accent-ink:#fff;
+  --danger:#B3261E; --warn:#A8730F;
+  --grid:#DCE0D8; --grid-major:#C3CBC1;
+  --shadow:0 1px 2px rgba(22,28,34,.06),0 8px 24px rgba(22,28,34,.06);
+  --r:7px;
+}
+:root:not([data-theme="light"]){
+  @media (prefers-color-scheme: dark){
+    --paper:#0F1418; --panel:#161D22; --sunk:#0B0F12;
+    --ink:#E7EBE4; --ink2:#95A19F; --ink3:#6B7876;
+    --line:#2A343A; --line2:#212A30;
+    --accent:#F0763C; --accent-ink:#16110D;
+    --danger:#E0685C; --warn:#D8A23E;
+    --grid:#1B2429; --grid-major:#2B373D;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F1418; --panel:#161D22; --sunk:#0B0F12;
+  --ink:#E7EBE4; --ink2:#95A19F; --ink3:#6B7876;
+  --line:#2A343A; --line2:#212A30;
+  --accent:#F0763C; --accent-ink:#16110D;
+  --danger:#E0685C; --warn:#D8A23E;
+  --grid:#1B2429; --grid-major:#2B373D;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  font-size:14px; line-height:1.45; -webkit-text-size-adjust:100%;
+}
+.app{display:grid; grid-template-columns:296px 1fr; grid-template-rows:auto 1fr auto; height:100dvh; min-height:520px}
+header{
+  grid-column:1/-1; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line);
+}
+.wordmark{display:flex; align-items:baseline; gap:9px; margin-right:auto}
+.wordmark b{font-family:"IBM Plex Sans Condensed",sans-serif; font-weight:700; font-size:19px; letter-spacing:.01em}
+.wordmark span{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink3); letter-spacing:.08em; text-transform:uppercase}
+.seg{display:flex; border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--paper)}
+.seg button{border:0; background:transparent; color:var(--ink2); padding:6px 13px; font:inherit; font-size:13px; cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent); color:var(--accent-ink); font-weight:600}
+.seg button:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+aside{
+  grid-row:2/4; background:var(--panel); border-right:1px solid var(--line);
+  overflow-y:auto; padding:14px 14px 28px; display:flex; flex-direction:column; gap:20px;
+}
+.stack{display:flex; flex-direction:column; gap:9px}
+h2{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:11px; font-weight:600;
+  letter-spacing:.13em; text-transform:uppercase; color:var(--ink3);
+  margin:0; padding-bottom:6px; border-bottom:1px solid var(--line2);
+}
+label{font-size:12px; color:var(--ink2)}
+.dim{display:flex; align-items:center; gap:6px}
+.dim label{width:52px; flex:none}
+input[type=number],input[type=text],select{
+  width:100%; min-width:0; padding:6px 8px; border:1px solid var(--line); border-radius:5px;
+  background:var(--paper); color:var(--ink); font-family:"IBM Plex Mono",monospace; font-size:13px;
+  font-variant-numeric:tabular-nums;
+}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.unit{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink3); flex:none}
+.row{display:flex; gap:8px; align-items:center}
+.grow{flex:1; min-width:0}
+button.btn{
+  font:inherit; font-size:13px; padding:7px 11px; border-radius:var(--r); cursor:pointer;
+  border:1px solid var(--line); background:var(--paper); color:var(--ink);
+}
+button.btn:hover{border-color:var(--ink3)}
+button.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600}
+button.btn.ghost{border-color:transparent; color:var(--ink2); padding:5px 8px}
+button.btn.ghost:hover{background:var(--sunk); color:var(--ink)}
+button.btn:disabled{opacity:.45; cursor:not-allowed}
+.palette{display:grid; grid-template-columns:1fr 1fr; gap:7px}
+.chip{
+  display:flex; flex-direction:column; gap:2px; align-items:flex-start; text-align:left;
+  padding:7px 9px; border-radius:var(--r); border:1px solid var(--line);
+  background:var(--paper); color:var(--ink); cursor:pointer; font:inherit; position:relative; overflow:hidden;
+}
+.chip:hover{border-color:var(--ink3)}
+.chip::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--c)}
+.chip b{font-weight:600; font-size:12.5px; padding-left:4px}
+.chip i{font-style:normal; font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink3); padding-left:4px}
+.lib{display:flex; flex-direction:column; gap:5px}
+.lib .rowi{display:flex; align-items:center; gap:6px; padding:5px 7px; border:1px solid var(--line);
+  border-radius:var(--r); background:var(--paper)}
+.lib .rowi b{font-weight:500; font-size:12.5px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.lib .rowi small{font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink3); flex:none}
+.chip .x{position:absolute; top:3px; right:3px; border:0; background:transparent; color:var(--ink3);
+  font:inherit; font-size:13px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:4px}
+.chip .x:hover{background:var(--sunk); color:var(--danger)}
+.inv{display:flex; flex-direction:column; gap:4px; font-family:"IBM Plex Mono",monospace; font-size:12.5px}
+.inv div{display:flex; justify-content:space-between; gap:8px; padding:3px 0; border-bottom:1px dotted var(--line2)}
+.inv div span:last-child{font-variant-numeric:tabular-nums; color:var(--ink2)}
+.empty{color:var(--ink3); font-size:12.5px; font-style:italic}
+.fitout{
+  font-family:"IBM Plex Mono",monospace; background:var(--sunk); border-radius:var(--r);
+  padding:9px 11px; display:flex; flex-direction:column; gap:3px; font-size:12.5px;
+}
+.fitout b{font-size:24px; font-weight:600; letter-spacing:-.01em; line-height:1.1}
+.fitout small{color:var(--ink3); font-size:11.5px}
+main{position:relative; background:var(--paper); overflow:hidden}
+canvas{display:block; width:100%; height:100%; touch-action:none; cursor:crosshair}
+.overlay{position:absolute; top:10px; right:10px; display:flex; gap:6px; background:var(--panel);
+  border:1px solid var(--line); border-radius:var(--r); padding:4px; box-shadow:var(--shadow)}
+footer{
+  grid-column:2/3; display:flex; gap:18px; align-items:center; flex-wrap:wrap;
+  padding:7px 14px; border-top:1px solid var(--line); background:var(--panel);
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink2); font-variant-numeric:tabular-nums;
+}
+footer .k{color:var(--ink3)}
+.warnpill{display:none; align-items:center; gap:6px; color:var(--danger); font-weight:500}
+.warnpill.on{display:inline-flex}
+.warnpill::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--danger)}
+dialog{
+  border:1px solid var(--line); border-radius:10px; background:var(--panel); color:var(--ink);
+  padding:0; max-width:min(680px,92vw); box-shadow:var(--shadow);
+}
+dialog::backdrop{background:rgba(10,14,16,.5)}
+.dlg{padding:16px; display:flex; flex-direction:column; gap:12px}
+.dlg textarea{
+  width:100%; height:180px; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  border:1px solid var(--line); border-radius:6px; padding:8px; background:var(--paper); color:var(--ink); resize:vertical;
+}
+.dlg img{max-width:100%; max-height:52vh; object-fit:contain; border:1px solid var(--line); border-radius:6px; background:#fff}
+.hint{font-size:12px; color:var(--ink3)}
+kbd{font-family:"IBM Plex Mono",monospace; font-size:11px; background:var(--sunk); border:1px solid var(--line);
+  border-bottom-width:2px; border-radius:4px; padding:0 4px}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr; grid-template-rows:auto minmax(280px,52vh) auto auto; height:auto; min-height:100dvh}
+  aside{grid-row:auto; grid-column:1; border-right:0; border-top:1px solid var(--line); overflow:visible}
+  main{grid-row:2}
+  footer{grid-column:1; order:3}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<div class="app">
+  <header>
+    <div class="wordmark"><b>Booth Plotter</b><span>market layouts</span></div>
+    <div class="seg" role="group" aria-label="Tool">
+      <button id="mSelect" aria-pressed="true">Place &amp; move</button>
+      <button id="mMeasure" aria-pressed="false">Measure</button>
+      <button id="mDraw" aria-pressed="false">Draw shape</button>
+    </div>
+    <div class="row">
+      <label for="snap" class="unit">SNAP</label>
+      <select id="snap" style="width:auto"><option value="1">1"</option><option value="3">3"</option><option value="6" selected>6"</option><option value="12">1'</option><option value="0">free</option></select>
+    </div>
+    <button class="btn ghost" id="btnData">Save / Load</button>
+    <button class="btn ghost" id="btnPng">Image</button>
+    <button class="btn ghost" id="btnClear">Reset</button>
+  </header>
+
+  <aside>
+    <section class="stack">
+      <h2>The space</h2>
+      <div class="dim"><label for="sw">Width</label>
+        <input id="sw" class="grow" type="number" min="0" step="1" value="10"><span class="unit">ft</span>
+        <input id="swi" style="width:56px" type="number" min="0" max="11" step="1" value="0"><span class="unit">in</span></div>
+      <div class="dim"><label for="sd">Depth</label>
+        <input id="sd" class="grow" type="number" min="0" step="1" value="10"><span class="unit">ft</span>
+        <input id="sdi" style="width:56px" type="number" min="0" max="11" step="1" value="0"><span class="unit">in</span></div>
+      <div class="row" id="spacePresets"></div>
+    </section>
+
+    <section class="stack">
+      <h2>Drop a block</h2>
+      <div class="palette" id="palette"></div>
+      <div id="modWrap" hidden>
+        <h2 style="margin-top:4px">My modules</h2>
+        <div class="palette" id="modules" style="margin-top:8px"></div>
+      </div>
+      <div class="row">
+        <input id="cw" type="number" step="1" min="1" placeholder="W in" title="Custom width, inches" class="grow">
+        <input id="ch" type="number" step="1" min="1" placeholder="D in" title="Custom depth, inches" class="grow">
+        <button class="btn" id="btnCustom">Add</button>
+      </div>
+      <p class="hint">Custom size in inches. <kbd>R</kbd> turn 90° · <kbd>D</kbd> duplicate · <kbd>⌫</kbd> delete · hold <kbd>alt</kbd> to ignore snapping · drag the handle above a block to set any angle</p>
+    </section>
+
+    <section class="stack" id="propsWrap" hidden>
+      <h2>Selected</h2>
+      <label for="pName">Label — shown on the block</label>
+      <input id="pName" type="text" placeholder="e.g. Potted plant, Julie's table" style="font-family:'IBM Plex Sans'">
+      <div class="row" id="pSize">
+        <input id="pW" type="number" step="1" min="1" class="grow" title="Width, inches">
+        <span class="unit">×</span>
+        <input id="pH" type="number" step="1" min="1" class="grow" title="Depth, inches">
+        <span class="unit">in</span>
+      </div>
+      <div class="dim"><label for="pA">Angle</label>
+        <input id="pA" type="number" step="1" class="grow" style="max-width:70px"><span class="unit">°</span>
+        <button class="btn ghost" id="pRot90" title="Turn a quarter turn">+90°</button>
+        <span class="unit grow" id="pArea" style="text-align:right"></span></div>
+      <div class="dim"><label for="pClear">Clearance</label>
+        <input id="pClear" type="number" step="1" min="0" class="grow" style="max-width:70px"><span class="unit">in</span>
+        <select id="pSide" class="grow" style="font-family:'IBM Plex Sans'">
+          <option value="a">all around</option>
+          <option value="b">behind</option>
+          <option value="f">in front</option>
+          <option value="l">to the left</option>
+          <option value="r">to the right</option>
+        </select></div>
+      <div class="row">
+        <button class="btn grow" id="pDup">Duplicate</button>
+        <button class="btn grow" id="pDel">Delete</button>
+      </div>
+      <button class="btn" id="pSaveMod">Save as a reusable module</button>
+    </section>
+
+    <section class="stack">
+      <h2>How many fit?</h2>
+      <select id="fitPick"></select>
+      <div class="dim"><label for="gapF">Gap</label>
+        <input id="gapF" class="grow" type="number" min="0" step="1" value="3"><span class="unit">ft</span>
+        <input id="gapI" style="width:56px" type="number" min="0" max="11" step="1" value="0"><span class="unit">in</span></div>
+      <div class="fitout" id="fitOut"></div>
+      <button class="btn" id="btnFill">Fill the space with these</button>
+    </section>
+
+    <section class="stack">
+      <h2>Saved layouts</h2>
+      <div class="row">
+        <input id="layName" class="grow" type="text" placeholder="Name this layout" style="font-family:'IBM Plex Sans'">
+        <button class="btn" id="btnSaveLay">Save</button>
+      </div>
+      <div class="lib" id="layList"></div>
+    </section>
+
+    <section class="stack">
+      <h2>On the floor</h2>
+      <div class="inv" id="inv"></div>
+    </section>
+  </aside>
+
+  <main>
+    <canvas id="cv"></canvas>
+    <div class="overlay">
+      <button class="btn ghost" id="zOut" title="Zoom out">−</button>
+      <button class="btn ghost" id="zIn" title="Zoom in">+</button>
+      <button class="btn ghost" id="zFit" title="Fit to view">Fit</button>
+    </div>
+  </main>
+
+  <footer>
+    <span><span class="k">CURSOR</span> <span id="stCur">—</span></span>
+    <span><span class="k">SPACE</span> <span id="stSpace">—</span></span>
+    <span><span class="k">USED</span> <span id="stUsed">—</span></span>
+    <span class="warnpill" id="stWarn">overlap</span>
+    <span style="margin-left:auto" class="k" id="stMode">drag empty floor to pan · scroll to zoom</span>
+  </footer>
+</div>
+
+<dialog id="dlgData"><form method="dialog" class="dlg">
+  <h2 style="border:0;padding:0">Save / load a layout</h2>
+  <p class="hint">Your work autosaves in this browser. Copy the text below to keep a layout somewhere else, or paste one in and load it.</p>
+  <textarea id="dataBox" spellcheck="false"></textarea>
+  <div class="row"><button class="btn" value="load" id="doLoad" type="button">Load pasted layout</button>
+  <button class="btn" id="doCopy" type="button">Copy</button>
+  <button class="btn primary" style="margin-left:auto" value="close">Done</button></div>
+</form></dialog>
+
+<dialog id="dlgPng"><form method="dialog" class="dlg">
+  <h2 style="border:0;padding:0">Layout image</h2>
+  <p class="hint">Right-click or long-press the image to save it.</p>
+  <img id="pngOut" alt="Layout drawing">
+  <div class="row"><a class="btn" id="pngDl" download="booth-layout.png" hidden>Download</a>
+  <button class="btn primary" style="margin-left:auto" value="close">Done</button></div>
+</form></dialog>
+
+<script>
+"use strict";
+/* ---------- units ---------- */
+const IN = { // everything internal is inches
+  fmt(v){
+    const neg = v < 0 ? "-" : ""; v = Math.abs(Math.round(v*2)/2);
+    const f = Math.floor(v/12); let i = v - f*12;
+    const frac = i % 1 ? '½' : ''; i = Math.floor(i);
+    if (!f) return neg + i + frac + '"';
+    if (!i && !frac) return neg + f + "'";
+    return neg + f + "'" + i + frac + '"';
+  },
+  from(ft, inch){ return (+ft||0)*12 + (+inch||0); }
+};
+
+/* ---------- presets ---------- */
+const C = ["#2F6E68","#3C5A78","#9A7420","#6D4A6B","#4A6B39","#7A4A38"];
+const PRESETS = [
+  {n:"6' table",   w:72,  h:30, c:0},
+  {n:"8' table",   w:96,  h:30, c:0},
+  {n:"4' table",   w:48,  h:30, c:0},
+  {n:"Round 60\"", w:60,  h:60, c:1},
+  {n:"10×10 tent", w:120, h:120,c:2},
+  {n:"10×20 tent", w:240, h:120,c:2},
+  {n:"Grid wall",  w:24,  h:60, c:3},
+  {n:"Shelf unit", w:36,  h:18, c:3},
+  {n:"Chair",      w:18,  h:18, c:4},
+  {n:"Bin",        w:24,  h:24, c:5}
+];
+const SPACE_PRESETS = [["10×10",120,120],["10×20",240,120],["8×8",96,96],["12×12",144,144]];
+
+/* ---------- state ---------- */
+const S = {
+  space:{w:120,h:120},
+  blocks:[], measures:[],
+  sel:null, selKind:null,
+  mode:"select", snap:6,
+  view:{s:3, ox:60, oy:60}
+};
+let uid = 1;
+const hist = [];
+const clone = o => JSON.parse(JSON.stringify(o));
+function push(){ hist.push(clone({space:S.space,blocks:S.blocks,measures:S.measures})); if(hist.length>60) hist.shift(); }
+function undo(){ const p = hist.pop(); if(!p) return; S.space=p.space; S.blocks=p.blocks; S.measures=p.measures; S.sel=null; syncSpaceInputs(); refresh(); }
+
+/* ---------- geometry ----------
+   Every block is a polygon in its own local space, centred on (0,0),
+   placed at (cx,cy) and turned by `a` degrees. Rectangles are just the
+   four-corner case, so angles and free-drawn shapes share one engine. */
+const RAD = Math.PI/180;
+function localPts(b){
+  if (b.pts) return b.pts;
+  const w = b.w/2, h = b.h/2;
+  return [{x:-w,y:-h},{x:w,y:-h},{x:w,y:h},{x:-w,y:h}];
+}
+function worldPts(b){
+  const c = Math.cos((b.a||0)*RAD), s = Math.sin((b.a||0)*RAD);
+  return localPts(b).map(p => ({x:b.cx + p.x*c - p.y*s, y:b.cy + p.x*s + p.y*c}));
+}
+function bbox(pts){
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for (const p of pts){ if(p.x<x0)x0=p.x; if(p.y<y0)y0=p.y; if(p.x>x1)x1=p.x; if(p.y>y1)y1=p.y; }
+  return {x:x0, y:y0, w:x1-x0, h:y1-y0};
+}
+const localBox = b => b.pts ? bbox(b.pts) : {x:-b.w/2, y:-b.h/2, w:b.w, h:b.h};
+function area(pts){ // shoelace, square inches
+  let a = 0;
+  for (let i=0,j=pts.length-1; i<pts.length; j=i++) a += pts[j].x*pts[i].y - pts[i].x*pts[j].y;
+  return Math.abs(a/2);
+}
+function inPoly(p, poly){
+  let hit = false;
+  for (let i=0,j=poly.length-1; i<poly.length; j=i++){
+    const a = poly[i], b = poly[j];
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x-a.x)*(p.y-a.y)/(b.y-a.y) + a.x) hit = !hit;
+  }
+  return hit;
+}
+function segHit(p1,p2,p3,p4){
+  const d = (p2.x-p1.x)*(p4.y-p3.y) - (p2.y-p1.y)*(p4.x-p3.x);
+  if (Math.abs(d) < 1e-9) return false;
+  const t = ((p3.x-p1.x)*(p4.y-p3.y) - (p3.y-p1.y)*(p4.x-p3.x))/d;
+  const u = ((p3.x-p1.x)*(p2.y-p1.y) - (p3.y-p1.y)*(p2.x-p1.x))/d;
+  return t > 0.001 && t < 0.999 && u > 0.001 && u < 0.999;
+}
+const boxHit = (a,b) => a.x < b.x+b.w-.01 && a.x+a.w > b.x+.01 && a.y < b.y+b.h-.01 && a.y+a.h > b.y+.01;
+function polyHit(A, B){ // works for concave shapes too, unlike SAT
+  if (!boxHit(bbox(A), bbox(B))) return false;
+  for (let i=0,j=A.length-1; i<A.length; j=i++)
+    for (let k=0,l=B.length-1; k<B.length; l=k++)
+      if (segHit(A[j],A[i],B[l],B[k])) return true;
+  return inPoly(A[0], B) || inPoly(B[0], A);
+}
+/* clearance is measured in the block's own frame, so "behind" follows a turned table */
+function clearPts(b){
+  const n = b.clear||0, r = localBox(b);
+  let o;
+  switch (b.cs){
+    case "b": o = {x:r.x, y:r.y-n, w:r.w, h:r.h+n}; break;
+    case "f": o = {x:r.x, y:r.y, w:r.w, h:r.h+n}; break;
+    case "l": o = {x:r.x-n, y:r.y, w:r.w+n, h:r.h}; break;
+    case "r": o = {x:r.x, y:r.y, w:r.w+n, h:r.h}; break;
+    default:  o = {x:r.x-n, y:r.y-n, w:r.w+2*n, h:r.h+2*n};
+  }
+  const c = Math.cos((b.a||0)*RAD), s = Math.sin((b.a||0)*RAD);
+  return [{x:o.x,y:o.y},{x:o.x+o.w,y:o.y},{x:o.x+o.w,y:o.y+o.h},{x:o.x,y:o.y+o.h}]
+    .map(p => ({x:b.cx + p.x*c - p.y*s, y:b.cy + p.x*s + p.y*c}));
+}
+function flags(){
+  const ps = S.blocks.map(worldPts);
+  return S.blocks.map((b,i)=>{
+    const out = ps[i].some(p => p.x < -.01 || p.y < -.01 || p.x > S.space.w+.01 || p.y > S.space.h+.01);
+    let over = false, tight = false;
+    for (let j=0;j<ps.length;j++){
+      if (i===j) continue;
+      if (polyHit(ps[i], ps[j])) over = true;
+      else if ((b.clear||0) > 0 && polyHit(clearPts(b), ps[j])) tight = true;
+      else { const o = S.blocks[j]; if ((o.clear||0) > 0 && polyHit(clearPts(o), ps[i])) tight = true; }
+    }
+    return {over, out, tight};
+  });
+}
+
+/* ---------- canvas ---------- */
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+let W = 0, H = 0, touched = false;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const X = x => S.view.ox + x*S.view.s, Y = y => S.view.oy + y*S.view.s;
+const wx = px => (px - S.view.ox)/S.view.s, wy = py => (py - S.view.oy)/S.view.s;
+
+new ResizeObserver(()=>{ resize(); }).observe(document.querySelector("main"));
+function resize(){
+  const r = cv.getBoundingClientRect(), d = Math.min(devicePixelRatio||1, 2);
+  W = r.width; H = r.height;
+  cv.width = Math.max(1, Math.round(W*d)); cv.height = Math.max(1, Math.round(H*d));
+  ctx.setTransform(d,0,0,d,0,0);
+  if (!touched && W > 40){ fit(); return; }
+  draw();
+}
+function fit(){
+  const pad = 64;
+  S.view.s = Math.min((W-pad*2)/S.space.w, (H-pad*2)/S.space.h) || 3;
+  S.view.ox = (W - S.space.w*S.view.s)/2;
+  S.view.oy = (H - S.space.h*S.view.s)/2;
+  draw();
+}
+const HANDLE = 24; // screen px from the block edge to the rotation grip
+function handlePt(b){
+  const r = localBox(b), c = Math.cos((b.a||0)*RAD), s = Math.sin((b.a||0)*RAD);
+  const p = {x:r.x + r.w/2, y:r.y - HANDLE/S.view.s};
+  return {x:b.cx + p.x*c - p.y*s, y:b.cy + p.x*s + p.y*c};
+}
+function topPt(b){
+  const r = localBox(b), c = Math.cos((b.a||0)*RAD), s = Math.sin((b.a||0)*RAD);
+  const p = {x:r.x + r.w/2, y:r.y};
+  return {x:b.cx + p.x*c - p.y*s, y:b.cy + p.x*s + p.y*c};
+}
+
+function draw(){
+  const t = {paper:css("--paper"), panel:css("--panel"), ink:css("--ink"), ink2:css("--ink2"), ink3:css("--ink3"),
+             line:css("--line"), grid:css("--grid"), gridM:css("--grid-major"), acc:css("--accent"),
+             danger:css("--danger"), warn:css("--warn")};
+  const dark = document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = t.paper; ctx.fillRect(0,0,W,H);
+  const s = S.view.s;
+
+  ctx.fillStyle = dark ? "rgba(255,255,255,.035)" : "rgba(255,255,255,.75)";
+  ctx.fillRect(X(0), Y(0), S.space.w*s, S.space.h*s);
+
+  ctx.lineWidth = 1;
+  const step = s*12 < 7 ? 60 : 12;
+  ctx.beginPath();
+  for (let x=0; x<=S.space.w+.01; x+=step){ ctx.moveTo(Math.round(X(x))+.5, Y(0)); ctx.lineTo(Math.round(X(x))+.5, Y(S.space.h)); }
+  for (let y=0; y<=S.space.h+.01; y+=step){ ctx.moveTo(X(0), Math.round(Y(y))+.5); ctx.lineTo(X(S.space.w), Math.round(Y(y))+.5); }
+  ctx.strokeStyle = t.grid; ctx.stroke();
+  ctx.beginPath();
+  for (let x=0; x<=S.space.w+.01; x+=step*5){ ctx.moveTo(Math.round(X(x))+.5, Y(0)); ctx.lineTo(Math.round(X(x))+.5, Y(S.space.h)); }
+  for (let y=0; y<=S.space.h+.01; y+=step*5){ ctx.moveTo(X(0), Math.round(Y(y))+.5); ctx.lineTo(X(S.space.w), Math.round(Y(y))+.5); }
+  ctx.strokeStyle = t.gridM; ctx.stroke();
+
+  ctx.strokeStyle = t.ink; ctx.lineWidth = 2;
+  ctx.strokeRect(Math.round(X(0))+.5, Math.round(Y(0))+.5, Math.round(S.space.w*s), Math.round(S.space.h*s));
+  dimLine(X(0), Y(0)-28, X(S.space.w), Y(0)-28, IN.fmt(S.space.w), t);
+  dimLine(X(0)-30, Y(0), X(0)-30, Y(S.space.h), IN.fmt(S.space.h), t);
+
+  const fl = flags();
+  S.blocks.forEach((b,i)=>{
+    const pts = worldPts(b), f = fl[i], col = C[b.c % C.length];
+    if (b.clear > 0){
+      ctx.save(); ctx.setLineDash([5,4]); ctx.lineWidth = 1;
+      ctx.strokeStyle = f.tight ? t.warn : t.ink3;
+      ctx.fillStyle = f.tight ? hex(t.warn,.10) : hex(col,.07);
+      path(clearPts(b)); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = hex(col, dark ? .34 : .22);
+    ctx.strokeStyle = f.over || f.out ? t.danger : col;
+    ctx.lineWidth = f.over || f.out ? 2 : 1.5;
+    path(pts); ctx.fill(); ctx.stroke();
+    label(b, pts, t);
+    if (S.selKind === "b" && S.sel === b.id){
+      ctx.save();
+      ctx.setLineDash([4,3]); ctx.strokeStyle = t.acc; ctx.lineWidth = 2;
+      path(pts); ctx.stroke();
+      ctx.setLineDash([]);
+      const hp = handlePt(b), tp = topPt(b);
+      ctx.beginPath(); ctx.moveTo(X(tp.x), Y(tp.y)); ctx.lineTo(X(hp.x), Y(hp.y)); ctx.stroke();
+      ctx.beginPath(); ctx.arc(X(hp.x), Y(hp.y), 5, 0, 7); 
+      ctx.fillStyle = t.acc; ctx.fill();
+      ctx.restore();
+    }
+  });
+
+  if (draft.pts.length){ // shape being drawn
+    ctx.save();
+    ctx.strokeStyle = t.acc; ctx.lineWidth = 1.5; ctx.setLineDash([5,3]);
+    ctx.beginPath();
+    draft.pts.forEach((p,i)=> i ? ctx.lineTo(X(p.x), Y(p.y)) : ctx.moveTo(X(p.x), Y(p.y)));
+    if (draft.cur) ctx.lineTo(X(draft.cur.x), Y(draft.cur.y));
+    ctx.stroke(); ctx.setLineDash([]);
+    draft.pts.forEach((p,i)=>{
+      ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), i === 0 && draft.pts.length > 2 ? 6 : 3.5, 0, 7);
+      ctx.fillStyle = i === 0 ? t.acc : t.panel; ctx.strokeStyle = t.acc; ctx.fill(); ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  S.measures.forEach(m=>{
+    const on = S.selKind === "m" && S.sel === m.id;
+    dimLine(X(m.x1), Y(m.y1), X(m.x2), Y(m.y2),
+      IN.fmt(Math.hypot(m.x2-m.x1, m.y2-m.y1)), t, t.acc, on);
+  });
+  if (drag && drag.k === "measure")
+    dimLine(X(drag.x1), Y(drag.y1), X(drag.x2), Y(drag.y2),
+      IN.fmt(Math.hypot(drag.x2-drag.x1, drag.y2-drag.y1)), t, t.acc, true);
+}
+function path(pts){
+  ctx.beginPath();
+  pts.forEach((p,i)=> i ? ctx.lineTo(X(p.x), Y(p.y)) : ctx.moveTo(X(p.x), Y(p.y)));
+  ctx.closePath();
+}
+function label(b, pts, t){
+  const bb = bbox(pts), s = S.view.s;
+  if (bb.w*s < 40 || bb.h*s < 18) return;
+  const lb = localBox(b);
+  let a = ((b.a||0) % 180 + 180) % 180; if (a > 90) a -= 180;   // keep text upright
+  ctx.save();
+  ctx.translate(X(b.cx), Y(b.cy)); ctx.rotate(a*RAD);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const room = (Math.abs(a) < 45 ? lb.h : lb.w) * s;
+  ctx.fillStyle = t.ink;
+  ctx.font = '600 11.5px "IBM Plex Sans Condensed", sans-serif';
+  ctx.fillText(b.n, 0, room > 34 ? -7 : 0);
+  if (room > 34){
+    ctx.fillStyle = t.ink3;
+    ctx.font = '400 10.5px "IBM Plex Mono", monospace';
+    ctx.fillText(b.pts ? Math.round(area(b.pts)/144) + " sq ft"
+                       : IN.fmt(b.w) + " × " + IN.fmt(b.h), 0, 8);
+  }
+  ctx.restore();
+}
+function hex(h, a){
+  h = h.replace("#",""); if (h.length===3) h = h.split("").map(c=>c+c).join("");
+  return "rgba("+parseInt(h.slice(0,2),16)+","+parseInt(h.slice(2,4),16)+","+parseInt(h.slice(4,6),16)+","+a+")";
+}
+function dimLine(x1,y1,x2,y2,label,t,color,strong){
+  const c = color || t.ink2;
+  ctx.save();
+  ctx.strokeStyle = c; ctx.lineWidth = strong ? 2 : 1;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  const a = Math.atan2(y2-y1, x2-x1) + Math.PI/2, tl = 5;
+  ctx.beginPath();
+  ctx.moveTo(x1+Math.cos(a)*tl, y1+Math.sin(a)*tl); ctx.lineTo(x1-Math.cos(a)*tl, y1-Math.sin(a)*tl);
+  ctx.moveTo(x2+Math.cos(a)*tl, y2+Math.sin(a)*tl); ctx.lineTo(x2-Math.cos(a)*tl, y2-Math.sin(a)*tl);
+  ctx.stroke();
+  ctx.font = '500 11.5px "IBM Plex Mono", monospace';
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const mx = (x1+x2)/2, my = (y1+y2)/2, w = ctx.measureText(label).width + 10;
+  ctx.fillStyle = css("--panel"); ctx.fillRect(mx-w/2, my-8, w, 16);
+  ctx.fillStyle = c; ctx.fillText(label, mx, my);
+  ctx.restore();
+}
+
+/* ---------- snapping (alt, or snap "free", turns it all off) ---------- */
+function snapV(v, extras, free){
+  if (free) return v;
+  let best = v, d = 7/S.view.s;
+  for (const e of extras) if (Math.abs(e-v) < d){ d = Math.abs(e-v); best = e; }
+  if (best !== v) return best;
+  return S.snap ? Math.round(v/S.snap)*S.snap : v;
+}
+function edgesX(){ const a=[0,S.space.w]; S.blocks.forEach(b=>worldPts(b).forEach(p=>a.push(p.x))); return a; }
+function edgesY(){ const a=[0,S.space.h]; S.blocks.forEach(b=>worldPts(b).forEach(p=>a.push(p.y))); return a; }
+const isFree = e => e.altKey || !S.snap;
+
+/* ---------- interaction ---------- */
+let drag = null;
+const draft = {pts:[], cur:null};
+const pos = e => { const r = cv.getBoundingClientRect(); return {px:e.clientX-r.left, py:e.clientY-r.top}; };
+function pick(x,y){
+  for (let i=S.blocks.length-1;i>=0;i--) if (inPoly({x,y}, worldPts(S.blocks[i]))) return S.blocks[i];
+  return null;
+}
+function pickM(px,py){
+  for (let i=S.measures.length-1;i>=0;i--){ const m = S.measures[i];
+    const ax=X(m.x1),ay=Y(m.y1),bx=X(m.x2),by=Y(m.y2);
+    const L=Math.hypot(bx-ax,by-ay)||1, tt=Math.max(0,Math.min(1,((px-ax)*(bx-ax)+(py-ay)*(by-ay))/(L*L)));
+    if (Math.hypot(px-(ax+tt*(bx-ax)), py-(ay+tt*(by-ay))) < 7) return m; }
+  return null;
+}
+function onHandle(px,py){
+  if (S.selKind !== "b") return null;
+  const b = S.blocks.find(v=>v.id===S.sel); if (!b) return null;
+  const h = handlePt(b);
+  return Math.hypot(px-X(h.x), py-Y(h.y)) < 11 ? b : null;
+}
+
+function closeDraft(){
+  if (draft.pts.length < 3){ draft.pts = []; draft.cur = null; draw(); return; }
+  const bb = bbox(draft.pts);
+  const cx = bb.x + bb.w/2, cy = bb.y + bb.h/2;
+  push();
+  const b = {id:uid++, n:"Shape", pts:draft.pts.map(p=>({x:p.x-cx, y:p.y-cy})),
+             cx, cy, a:0, c:5, clear:0, cs:"a"};
+  S.blocks.push(b);
+  draft.pts = []; draft.cur = null;
+  select("b", b.id); setMode("select"); refresh();
+}
+
+cv.addEventListener("pointerdown", e=>{
+  touched = true; cv.setPointerCapture(e.pointerId);
+  const {px,py} = pos(e), free = isFree(e);
+  const x = wx(px), y = wy(py);
+
+  if (S.mode === "draw"){
+    const p = {x:snapV(x, edgesX(), free), y:snapV(y, edgesY(), free)};
+    if (draft.pts.length > 2 && Math.hypot(X(p.x)-X(draft.pts[0].x), Y(p.y)-Y(draft.pts[0].y)) < 12){ closeDraft(); return; }
+    draft.pts.push(p); draw(); return;
+  }
+  if (S.mode === "measure"){
+    push();
+    drag = {k:"measure", x1:snapV(x, edgesX(), free), y1:snapV(y, edgesY(), free), x2:x, y2:y};
+    return;
+  }
+  const rot = onHandle(px,py);
+  if (rot){ push(); drag = {k:"rotate", id:rot.id}; return; }
+  const b = pick(x,y);
+  const m = pickM(px,py);
+  if (b){ select("b", b.id); push(); drag = {k:"move", id:b.id, dx:x-b.cx, dy:y-b.cy}; }
+  else if (m){ select("m", m.id); }
+  else { select(null); drag = {k:"pan", px, py, ox:S.view.ox, oy:S.view.oy}; }
+  draw();
+});
+cv.addEventListener("pointermove", e=>{
+  const {px,py} = pos(e), free = isFree(e);
+  const x = wx(px), y = wy(py);
+  document.getElementById("stCur").textContent = IN.fmt(x)+", "+IN.fmt(y);
+
+  if (S.mode === "draw" && !drag){
+    draft.cur = draft.pts.length ? {x:snapV(x, edgesX(), free), y:snapV(y, edgesY(), free)} : null;
+    if (draft.pts.length) draw();
+    return;
+  }
+  if (!drag){
+    cv.style.cursor = S.mode === "measure" ? "crosshair"
+      : onHandle(px,py) ? "grab" : pick(x,y) ? "move" : "grab";
+    return;
+  }
+  if (drag.k === "pan"){ S.view.ox = drag.ox + (px-drag.px); S.view.oy = drag.oy + (py-drag.py); draw(); return; }
+  if (drag.k === "rotate"){
+    const b = S.blocks.find(v=>v.id===drag.id); if (!b) return;
+    let deg = Math.atan2(y-b.cy, x-b.cx)/RAD + 90;
+    deg = free ? Math.round(deg) : Math.round(deg/15)*15;
+    b.a = ((deg % 360) + 360) % 360;
+    refresh(); return;
+  }
+  if (drag.k === "move"){
+    const b = S.blocks.find(v=>v.id===drag.id); if (!b) return;
+    b.cx = x - drag.dx; b.cy = y - drag.dy;
+    if (!free){ // snap the block's outer edges, not its centre
+      const bb = bbox(worldPts(b));
+      const ex = edgesX().flatMap(v=>[v, v-bb.w]), ey = edgesY().flatMap(v=>[v, v-bb.h]);
+      b.cx += snapV(bb.x, ex, false) - bb.x;
+      b.cy += snapV(bb.y, ey, false) - bb.y;
+    }
+    refresh(); return;
+  }
+  if (drag.k === "measure"){
+    let nx = snapV(x, edgesX(), free), ny = snapV(y, edgesY(), free);
+    const dxp = Math.abs(X(nx)-X(drag.x1)), dyp = Math.abs(Y(ny)-Y(drag.y1));
+    const lock = Math.max(14, Math.max(dxp,dyp)*0.12);
+    if (e.shiftKey || (!free && Math.min(dxp,dyp) < lock)){ if (dxp < dyp) nx = drag.x1; else ny = drag.y1; }
+    drag.x2 = nx; drag.y2 = ny; draw();
+  }
+});
+cv.addEventListener("pointerup", ()=>{
+  if (drag && drag.k === "measure"){
+    if (Math.hypot(drag.x2-drag.x1, drag.y2-drag.y1) * S.view.s > 12){
+      const m = {id:uid++, x1:drag.x1, y1:drag.y1, x2:drag.x2, y2:drag.y2};
+      S.measures.push(m); select("m", m.id);
+    } else hist.pop();
+  }
+  drag = null; refresh();
+});
+cv.addEventListener("dblclick", e=>{
+  if (S.mode === "draw"){ closeDraft(); return; }
+  const {px,py} = pos(e), b = pick(wx(px), wy(py));
+  if (!b) return;
+  const n = prompt("Label for this block", b.n);
+  if (n === null) return;
+  push(); b.n = n.trim() || b.n; select("b", b.id); refresh();
+});
+cv.addEventListener("wheel", e=>{
+  e.preventDefault(); touched = true;
+  const {px,py} = pos(e), k = Math.exp(-e.deltaY*0.0015);
+  const ns = Math.max(0.4, Math.min(24, S.view.s*k));
+  S.view.ox = px - (px-S.view.ox)*(ns/S.view.s);
+  S.view.oy = py - (py-S.view.oy)*(ns/S.view.s);
+  S.view.s = ns; draw();
+}, {passive:false});
+
+addEventListener("keydown", e=>{
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  const k = e.key.toLowerCase();
+  if ((e.metaKey||e.ctrlKey) && k === "z"){ e.preventDefault(); undo(); return; }
+  if (S.mode === "draw"){
+    if (e.key === "Enter"){ e.preventDefault(); closeDraft(); return; }
+    if (k === "escape"){ draft.pts = []; draft.cur = null; setMode("select"); draw(); return; }
+  }
+  if (k === "escape"){ select(null); draw(); return; }
+  if (!S.sel) return;
+  const b = S.blocks.find(v=>v.id===S.sel);
+  if (e.key === "Delete" || e.key === "Backspace"){
+    e.preventDefault(); push();
+    if (S.selKind === "b") S.blocks = S.blocks.filter(v=>v.id!==S.sel);
+    else S.measures = S.measures.filter(v=>v.id!==S.sel);
+    select(null); refresh(); return;
+  }
+  if (!b) return;
+  if (k === "r"){ push(); b.a = (((b.a||0) + 90) % 360 + 360) % 360; refresh(); }
+  if (k === "d"){ push(); const c = {...b, id:uid++, cx:b.cx+12, cy:b.cy+12}; S.blocks.push(c); select("b", c.id); refresh(); }
+  if (e.key.startsWith("Arrow")){
+    e.preventDefault(); push();
+    const n = e.altKey ? 1 : (S.snap || 1);
+    if (e.key === "ArrowLeft") b.cx -= n; if (e.key === "ArrowRight") b.cx += n;
+    if (e.key === "ArrowUp") b.cy -= n;   if (e.key === "ArrowDown") b.cy += n;
+    refresh();
+  }
+});
+
+/* ---------- blocks ---------- */
+function freeSpot(w,h){
+  const st = 6;
+  const boxes = S.blocks.map(b => bbox(worldPts(b)));
+  for (let y=0; y+h<=S.space.h; y+=st)
+    for (let x=0; x+w<=S.space.w; x+=st)
+      if (!boxes.some(bb => boxHit({x,y,w,h}, bb))) return {x,y};
+  return {x:(S.space.w-w)/2, y:(S.space.h-h)/2};
+}
+function add(p){
+  push();
+  const box = p.pts ? bbox(p.pts) : {w:p.w, h:p.h};
+  const s = freeSpot(box.w, box.h);
+  const b = {id:uid++, n:p.n, cx:s.x + box.w/2, cy:s.y + box.h/2, a:0,
+             c:p.c ?? 5, clear:p.clear||0, cs:p.cs||"a"};
+  if (p.pts) b.pts = clone(p.pts); else { b.w = p.w; b.h = p.h; }
+  S.blocks.push(b); select("b", b.id); refresh();
+}
+function select(kind, id){ S.selKind = kind; S.sel = kind ? id : null; syncProps(); }
+
+/* ---------- sidebar wiring ---------- */
+const $ = id => document.getElementById(id);
+
+/* library: reusable modules + saved layouts */
+const LIBKEY = "boothplotter.lib.v1";
+const LIB = {modules:[], layouts:[]};
+try{ Object.assign(LIB, JSON.parse(localStorage.getItem(LIBKEY)) || {}); }catch(e){}
+LIB.modules = LIB.modules || []; LIB.layouts = LIB.layouts || [];
+function saveLib(){ try{ localStorage.setItem(LIBKEY, JSON.stringify(LIB)); }catch(e){} }
+const allBlocks = () => PRESETS.concat(LIB.modules);
+const modSize = p => p.pts ? Math.round(area(p.pts)/144) + " sq ft"
+                           : IN.fmt(p.w) + " × " + IN.fmt(p.h);
+
+const chip = (p,i,src,del) =>
+  '<button class="chip" data-src="'+src+'" data-i="'+i+'" style="--c:'+C[p.c % C.length]+'">' +
+  (del ? '<span class="x" data-del="'+i+'" title="Remove module" role="button">×</span>' : '') +
+  '<b>'+esc(p.n)+'</b><i>'+modSize(p)+'</i></button>';
+
+function renderPalette(){
+  $("palette").innerHTML = PRESETS.map((p,i)=>chip(p,i,"p",false)).join("");
+  $("modWrap").hidden = !LIB.modules.length;
+  $("modules").innerHTML = LIB.modules.map((p,i)=>chip(p,i,"m",true)).join("");
+  const cur = $("fitPick").value;
+  $("fitPick").innerHTML = allBlocks().map((p,i)=>
+    '<option value="'+i+'">'+esc(p.n)+" — "+modSize(p)+"</option>").join("");
+  $("fitPick").value = cur && +cur < allBlocks().length ? cur : "0";
+}
+function paletteClick(e){
+  const x = e.target.closest(".x");
+  if (x){ e.stopPropagation(); LIB.modules.splice(+x.dataset.del, 1); saveLib(); renderPalette(); refreshFit(); return; }
+  const c = e.target.closest(".chip"); if (!c) return;
+  add(c.dataset.src === "m" ? LIB.modules[+c.dataset.i] : PRESETS[+c.dataset.i]);
+}
+$("palette").addEventListener("click", paletteClick);
+$("modules").addEventListener("click", paletteClick);
+
+$("pSaveMod").addEventListener("click", ()=>{
+  const b = selBlock(); if (!b) return;
+  const name = (prompt("Name this module", b.n) || "").trim(); if (!name) return;
+  LIB.modules = LIB.modules.filter(m => m.n !== name);
+  const m = {n:name, c:b.c, clear:Math.round(b.clear||0), cs:b.cs||"a"};
+  if (b.pts) m.pts = clone(b.pts); else { m.w = Math.round(b.w); m.h = Math.round(b.h); }
+  LIB.modules.push(m); saveLib(); renderPalette();
+});
+
+function renderLayouts(){
+  $("layList").innerHTML = LIB.layouts.length
+    ? LIB.layouts.map((l,i)=>
+        '<div class="rowi"><b>'+esc(l.name)+'</b><small>'+IN.fmt(l.data.space.w)+"×"+IN.fmt(l.data.space.h)+
+        " · "+l.data.blocks.length+'</small>' +
+        '<button class="btn ghost" data-open="'+i+'">Open</button>' +
+        '<button class="btn ghost" data-rm="'+i+'" title="Delete">×</button></div>').join("")
+    : '<p class="empty">Save a layout to reuse it at the next market.</p>';
+}
+$("layList").addEventListener("click", e=>{
+  const o = e.target.closest("[data-open]"), r = e.target.closest("[data-rm]");
+  if (o){ push(); load(clone(LIB.layouts[+o.dataset.open].data)); $("layName").value = LIB.layouts[+o.dataset.open].name; }
+  if (r){ if (confirm("Delete the layout “"+LIB.layouts[+r.dataset.rm].name+"”?")){
+    LIB.layouts.splice(+r.dataset.rm,1); saveLib(); renderLayouts(); } }
+});
+$("btnSaveLay").addEventListener("click", ()=>{
+  const name = ($("layName").value || "").trim();
+  if (!name){ $("layName").focus(); return; }
+  const data = clone({space:S.space, blocks:S.blocks, measures:S.measures});
+  const at = LIB.layouts.findIndex(l => l.name === name);
+  if (at >= 0){ if (!confirm("Overwrite “"+name+"”?")) return; LIB.layouts[at] = {name, data}; }
+  else LIB.layouts.push({name, data});
+  saveLib(); renderLayouts();
+});
+
+$("spacePresets").innerHTML = SPACE_PRESETS.map((s,i)=>'<button class="btn ghost" data-i="'+i+'">'+s[0]+'</button>').join("");
+$("spacePresets").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if (!b) return;
+  const [,w,h] = SPACE_PRESETS[+b.dataset.i]; push(); S.space = {w,h}; syncSpaceInputs(); fit(); refresh();
+});
+$("btnCustom").addEventListener("click", ()=>{
+  const w = +$("cw").value, h = +$("ch").value;
+  if (!(w>0 && h>0)) return;
+  add({n:IN.fmt(w)+"×"+IN.fmt(h), w, h, c:5});
+  $("cw").value = ""; $("ch").value = "";
+});
+["sw","swi","sd","sdi"].forEach(id => $(id).addEventListener("change", ()=>{
+  push();
+  S.space = {w:Math.max(12, IN.from($("sw").value, $("swi").value)),
+             h:Math.max(12, IN.from($("sd").value, $("sdi").value))};
+  fit(); refresh();
+}));
+function syncSpaceInputs(){
+  $("sw").value = Math.floor(S.space.w/12); $("swi").value = Math.round(S.space.w%12);
+  $("sd").value = Math.floor(S.space.h/12); $("sdi").value = Math.round(S.space.h%12);
+}
+$("snap").addEventListener("change", e => S.snap = +e.target.value);
+$("mSelect").addEventListener("click", ()=>setMode("select"));
+$("mMeasure").addEventListener("click", ()=>setMode("measure"));
+$("mDraw").addEventListener("click", ()=>setMode("draw"));
+function setMode(m){
+  if (m !== "draw"){ draft.pts = []; draft.cur = null; }
+  S.mode = m;
+  $("mSelect").setAttribute("aria-pressed", m==="select");
+  $("mMeasure").setAttribute("aria-pressed", m==="measure");
+  $("mDraw").setAttribute("aria-pressed", m==="draw");
+  $("stMode").textContent =
+    m === "measure" ? "drag to measure · snaps to edges · shift locks straight" :
+    m === "draw"    ? "click each corner · click the first point or press enter to close · esc cancels" :
+                      "drag empty floor to pan · scroll to zoom · alt ignores snapping";
+  draw();
+}
+$("zIn").addEventListener("click", ()=>zoom(1.25));
+$("zOut").addEventListener("click", ()=>zoom(1/1.25));
+$("zFit").addEventListener("click", fit);
+function zoom(k){
+  touched = true;
+  const ns = Math.max(0.4, Math.min(24, S.view.s*k));
+  S.view.ox = W/2 - (W/2 - S.view.ox)*(ns/S.view.s);
+  S.view.oy = H/2 - (H/2 - S.view.oy)*(ns/S.view.s);
+  S.view.s = ns; draw();
+}
+$("btnClear").addEventListener("click", ()=>{
+  if (!S.blocks.length && !S.measures.length) return;
+  if (!confirm("Clear every block and measurement from this layout?")) return;
+  push(); S.blocks = []; S.measures = []; select(null); refresh();
+});
+
+/* properties */
+function selBlock(){ return S.selKind === "b" ? S.blocks.find(v=>v.id===S.sel) : null; }
+function syncProps(){
+  const b = selBlock();
+  $("propsWrap").hidden = !b;
+  if (!b) return;
+  $("pName").value = b.n;
+  $("pSize").hidden = !!b.pts;
+  if (!b.pts){ $("pW").value = Math.round(b.w); $("pH").value = Math.round(b.h); }
+  $("pA").value = Math.round(b.a||0);
+  $("pArea").textContent = Math.round(area(localPts(b))/144) + " sq ft";
+  $("pClear").value = Math.round(b.clear||0); $("pSide").value = b.cs || "a";
+}
+$("pName").addEventListener("input", e=>{ const b = selBlock(); if (b){ b.n = e.target.value; refresh(); }});
+["pW","pH","pClear","pSide","pA"].forEach(id => $(id).addEventListener("change", ()=>{
+  const b = selBlock(); if (!b) return; push();
+  if (!b.pts){ b.w = Math.max(1, +$("pW").value||b.w); b.h = Math.max(1, +$("pH").value||b.h); }
+  b.a = (((+$("pA").value||0) % 360) + 360) % 360;
+  b.clear = Math.max(0, +$("pClear").value||0); b.cs = $("pSide").value; refresh();
+}));
+$("pRot90").addEventListener("click", ()=>{ const b = selBlock(); if (b){ push();
+  b.a = (((b.a||0) + 90) % 360 + 360) % 360; refresh(); }});
+$("pDup").addEventListener("click", ()=>{ const b = selBlock(); if (b){ push();
+  const c = {...b, id:uid++, cx:b.cx+12, cy:b.cy+12}; S.blocks.push(c); select("b", c.id); refresh(); }});
+$("pDel").addEventListener("click", ()=>{ const b = selBlock(); if (b){ push();
+  S.blocks = S.blocks.filter(v=>v.id!==b.id); select(null); refresh(); }});
+
+/* fit calculator */
+["fitPick","gapF","gapI"].forEach(id => $(id).addEventListener("change", refreshFit));
+function fitPlan(){
+  const p = allBlocks()[+$("fitPick").value] || PRESETS[0];
+  const box = p.pts ? bbox(p.pts) : {w:p.w, h:p.h};
+  const g = IN.from($("gapF").value, $("gapI").value);
+  const calc = (w,h) => {
+    const cols = Math.max(0, Math.floor((S.space.w + g) / (w + g)));
+    const rows = Math.max(0, Math.floor((S.space.h + g) / (h + g)));
+    return {cols, rows, n:cols*rows, w, h, g, p};
+  };
+  const a = calc(box.w, box.h), b = calc(box.h, box.w);
+  return b.n > a.n ? {...b, rot:1} : {...a, rot:0};
+}
+function refreshFit(){
+  const f = fitPlan();
+  $("fitOut").innerHTML = "<b>" + f.n + "</b>" +
+    "<span>" + f.cols + " across × " + f.rows + " deep" + (f.rot ? " (turned)" : "") + "</span>" +
+    "<small>" + IN.fmt(f.g) + " gap on every side</small>";
+  $("btnFill").disabled = f.n === 0;
+}
+$("btnFill").addEventListener("click", ()=>{
+  const f = fitPlan();
+  if (!f.n) return;
+  if (S.blocks.length && !confirm("Replace the " + S.blocks.length + " block(s) already placed?")) return;
+  push(); S.blocks = [];
+  const totW = f.cols*f.w + (f.cols-1)*f.g, totH = f.rows*f.h + (f.rows-1)*f.g;
+  const x0 = (S.space.w-totW)/2, y0 = (S.space.h-totH)/2;
+  for (let r=0;r<f.rows;r++) for (let c=0;c<f.cols;c++){
+    const b = {id:uid++, n:f.p.n, cx:x0 + c*(f.w+f.g) + f.w/2, cy:y0 + r*(f.h+f.g) + f.h/2,
+               a:f.rot ? 90 : 0, c:f.p.c, clear:f.p.clear||0, cs:f.p.cs||"a"};
+    if (f.p.pts) b.pts = clone(f.p.pts); else { b.w = f.p.w; b.h = f.p.h; }
+    S.blocks.push(b);
+  }
+  select(null); refresh();
+});
+
+/* footer + inventory */
+function refresh(){
+  const counts = {};
+  S.blocks.forEach(b=>counts[b.n] = (counts[b.n]||0)+1);
+  const keys = Object.keys(counts);
+  $("inv").innerHTML = keys.length
+    ? keys.map(k=>"<div><span>"+esc(k)+"</span><span>× "+counts[k]+"</span></div>").join("")
+    : '<p class="empty">Nothing placed yet.</p>';
+  const used = S.blocks.reduce((a,b)=>a + area(localPts(b)), 0) / 144;
+  const tot = S.space.w*S.space.h/144;
+  $("stSpace").textContent = IN.fmt(S.space.w)+" × "+IN.fmt(S.space.h)+"  ("+Math.round(tot)+" sq ft)";
+  $("stUsed").textContent = Math.round(used)+" sq ft · "+(tot ? Math.round(used/tot*100) : 0)+"%";
+  const f = flags();
+  $("stWarn").classList.toggle("on", f.some(v=>v.over || v.out));
+  refreshFit(); syncProps(); draw(); save();
+}
+const esc = s => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* persistence */
+const KEY = "boothplotter.v1";
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({space:S.space, blocks:S.blocks, measures:S.measures})); }catch(e){} }
+function migrate(b){ // layouts saved before free angles used a top-left corner and a 0/90 flag
+  if (b.cx === undefined){
+    const w = b.r ? b.h : b.w, h = b.r ? b.w : b.h;
+    b.cx = b.x + w/2; b.cy = b.y + h/2; b.a = b.r ? 90 : 0;
+    delete b.x; delete b.y; delete b.r;
+  }
+  b.a = b.a || 0; b.cs = b.cs || "a"; b.clear = b.clear || 0;
+  return b;
+}
+function load(json){
+  const d = typeof json === "string" ? JSON.parse(json) : json;
+  if (!d || !d.space) throw new Error("no layout");
+  S.space = {w:+d.space.w||120, h:+d.space.h||120};
+  S.blocks = (d.blocks||[]).map(b=>migrate({...b, id:uid++}));
+  S.measures = (d.measures||[]).map(m=>({...m, id:uid++}));
+  select(null); syncSpaceInputs(); fit(); refresh();
+}
+$("btnData").addEventListener("click", ()=>{
+  $("dataBox").value = JSON.stringify({space:S.space, blocks:S.blocks, measures:S.measures}, null, 1);
+  $("dlgData").showModal();
+});
+$("doLoad").addEventListener("click", ()=>{
+  try{ push(); load($("dataBox").value); $("dlgData").close(); }
+  catch(e){ alert("That text isn't a layout — paste the whole block, starting with {"); }
+});
+$("doCopy").addEventListener("click", e=>{
+  navigator.clipboard?.writeText($("dataBox").value)
+    .then(()=>{ e.target.textContent = "Copied"; setTimeout(()=>e.target.textContent = "Copy", 1400); })
+    .catch(()=>{ $("dataBox").select(); });
+});
+
+/* image export */
+$("btnPng").addEventListener("click", ()=>{
+  const sv = {...S.view}, sw = W, sh = H, dpr = 2, pad = 70;
+  const s = Math.min(6, 900/S.space.w);
+  W = S.space.w*s + pad*2; H = S.space.h*s + pad*2;
+  cv.width = W*dpr; cv.height = H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  S.view = {s, ox:pad, oy:pad};
+  const selSave = S.sel; S.sel = null;
+  const themeSave = document.documentElement.dataset.theme || "";
+  document.documentElement.dataset.theme = "light";
+  draw();
+  if (themeSave) document.documentElement.dataset.theme = themeSave;
+  else document.documentElement.removeAttribute("data-theme");
+  const url = cv.toDataURL("image/png");
+  S.sel = selSave; S.view = sv; W = sw; H = sh; resize();
+  $("pngOut").src = url; $("pngDl").href = url;
+  $("pngDl").hidden = window.self !== window.top;   // sandboxed viewers can't take a download
+  $("dlgPng").showModal();
+});
+
+/* boot */
+syncSpaceInputs(); setMode("select"); renderPalette(); renderLayouts();
+try{ const raw = localStorage.getItem(KEY); if (raw) load(raw); }catch(e){}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+resize(); refresh();
+</script>
