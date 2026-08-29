@@ -1,9 +1,9 @@
-# Booth Plotter
+# Marchitect
 
 A single-file tool for planning vendor market booth layouts. No build step, no dependencies —
 `index.html` is the whole app.
 
-**Live:** https://keslerj13.github.io/booth-plotter/
+**Live:** https://keslerj13.github.io/marchitect/
 
 ## What it does
 
